@@ -13,6 +13,8 @@ import type { Metadata } from 'next';
 import MapClientWrapper from '../src/components/MapClientWrapper';
 import { getDashboardPayload, type DashboardPayload } from '../src/lib/tps-data';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Eco-Log — Smart TPS Dashboard | Palangkaraya',
   description:
