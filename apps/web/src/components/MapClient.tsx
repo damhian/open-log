@@ -70,6 +70,9 @@ export default function MapClient({ payload }: MapClientProps) {
   const { tpsLocations, weather: initialWeather } = payload;
   const [localWeather, setLocalWeather] = useState(initialWeather);
 
+  const [showRadar, setShowRadar] = useState(false);
+  const [radarUrl, setRadarUrl] = useState<string | null>(null);
+
   const styles = {
     default: undefined,
     openstreetmap: "https://tiles.openfreemap.org/styles/bright",
@@ -106,6 +109,47 @@ export default function MapClient({ payload }: MapClientProps) {
 
     return () => clearTimeout(timer);
   }, [viewport.center]);
+
+  useEffect(() => {
+    if (showRadar && !radarUrl) {
+      fetch(`https://api.rainviewer.com/public/weather-maps.json?v=${Date.now()}`, {
+        cache: 'no-store',
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.radar && data.radar.past && data.radar.past.length > 0) {
+            const path = data.radar.past[data.radar.past.length - 1].path;
+            const url = `https://tilecache.rainviewer.com${path}/256/{z}/{x}/{y}/2/1_1.png`;
+            setRadarUrl(url);
+          }
+        })
+        .catch((err) => console.error('Failed to fetch RainViewer API:', err));
+    }
+  }, [showRadar, radarUrl]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (showRadar && radarUrl) {
+      if (!map.getSource('rainviewer')) {
+        map.addSource('rainviewer', { type: 'raster', tiles: [radarUrl], tileSize: 256 });
+        map.addLayer({
+          id: 'rainviewer-layer',
+          type: 'raster',
+          source: 'rainviewer',
+          paint: { 'raster-opacity': 0.6 }
+        });
+      }
+    } else {
+      if (map.getLayer('rainviewer-layer')) {
+        map.removeLayer('rainviewer-layer');
+      }
+      if (map.getSource('rainviewer')) {
+        map.removeSource('rainviewer');
+      }
+    }
+  }, [showRadar, radarUrl, mapRef.current]);
 
 
   return (
@@ -146,7 +190,8 @@ export default function MapClient({ payload }: MapClientProps) {
       <div className="relative flex-1 overflow-hidden">
 
         {/* ── Capacity legend ─────────────────────────────────────────────── */}
-        <div className="absolute top-3 left-3 z-10 bg-white/95 rounded-lg shadow-md px-4 py-3 text-sm">
+        {/* <div className="absolute top-3 left-3 z-10 bg-white/95 rounded-lg shadow-md px-4 py-3 text-sm"> */}
+        <div className="absolute top-3 left-3 z-10 bg-white/40 backdrop-blur-md border border-white/40 rounded-xl shadow-[0_4px_30px_rgba(0,0,0,0.1)] px-4 py-3 text-sm">
           <p className="font-bold mb-2 text-gray-800">TPS Capacity</p>
           {(Object.entries(CAPACITY_DOT_CLASS) as [TpsLocationSummary['capacityStatus'], string][]).map(
             ([status, dotClass]) => (
@@ -238,19 +283,29 @@ export default function MapClient({ payload }: MapClientProps) {
             );
           })}
         </Map>
-        <div className="absolute top-8 right-2 z-10">
+        <div className="absolute top-8 right-2 z-10 flex flex-col gap-2">
           <select
             value={style}
             onChange={(e) => setStyle(e.target.value as StyleKey)}
-            className="bg-background text-foreground border rounded-md px-2 py-1 text-sm shadow"
+            className="bg-white/40 backdrop-blur-md border border-white/40 text-gray-800 rounded-lg px-3 py-1.5 text-sm shadow-[0_4px_30px_rgba(0,0,0,0.1)] outline-none cursor-pointer hover:bg-white/50 transition-colors"
           >
             <option value="default">Default (Carto)</option>
             <option value="openstreetmap">OpenStreetMap</option>
             <option value="openstreetmap3d">OpenStreetMap 3D</option>
           </select>
+          <button
+            onClick={() => setShowRadar(!showRadar)}
+            className={`px-2 py-1.5 text-sm font-semibold rounded-md border shadow-sm transition-colors text-left ${
+              showRadar 
+                ? 'bg-blue-600 border-blue-700 text-white' 
+                : 'bg-background border-border text-foreground hover:bg-muted'
+            }`}
+          >
+            🌦️ Radar: {showRadar ? 'ON' : 'OFF'}
+          </button>
         </div>
         
-        <div className="absolute bottom-3 right-10 z-10 flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono bg-background/80 backdrop-blur px-2 py-1.5 rounded border">
+        <div className="absolute bottom-6 right-15 z-10 flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono bg-white/40 backdrop-blur-md px-3 py-2 rounded-xl border border-white/40 shadow-[0_4px_30px_rgba(0,0,0,0.1)] text-gray-800">
           <span>
             <span className="text-muted-foreground">lng:</span>{" "}
             {viewport.center[0].toFixed(3)}
